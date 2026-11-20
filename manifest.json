@@ -1,0 +1,19 @@
+{
+  "name": "Liamvscan Retail PDT Terminal",
+  "short_name": "Liamvscan",
+  "id": "com.xliamvr.scan",
+  "description": "Fast Retail Barcode Scanner & Stock Opname Terminal by Ilham Maulana Nur Al Rasyid",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1120",
+  "theme_color": "#0b1120",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='96' fill='%230f172a'/%3E%3Cpath d='M96 144h48v224H96zm72 0h24v224h-24zm48 0h48v224h-48zm72 0h24v224h-24zm48 0h32v224h-32zm56 0h24v224h-24z' fill='%2310b981'/%3E%3Crect x='64' y='244' width='384' height='16' rx='8' fill='%2338bdf8'/%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
