@@ -1,6 +1,6 @@
 // ============================================================================
-// LIAMVSCAN UI CONTROLLER v1.1 (com.xliamvr.scan)
-// Manajemen Per-Lokasi, Input Qty Cepat, Kamus Barcode, & Motion 60fps
+// LIAMVSCAN v2.0 ENGINE (com.xliamvr.scan)
+// 3D Tilt Physics, Kinetic Number Counter, SVG Donut Analytics & Multi-Lokasi
 // ============================================================================
 
 const LiamApp = {
@@ -8,30 +8,36 @@ const LiamApp = {
   pendingUnknownBarcode: '',
   currentFilter: 'ALL',
   scrollObserver: null,
+  lastDisplayedPcs: 0,
 
   init() {
     LiamDB.init();
-    this.initMotionEffects();
+    this.initMotionPhysics();
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').catch(() => {});
     }
 
-    document.getElementById('cfgStore').value = LiamDB.config.storeCode;
-    document.getElementById('cfgOperator').value = LiamDB.config.operator;
+    const cfgStore = document.getElementById('cfgStore');
+    const cfgOperator = document.getElementById('cfgOperator');
+    if (cfgStore) cfgStore.value = LiamDB.config.storeCode;
+    if (cfgOperator) cfgOperator.value = LiamDB.config.operator;
 
     this.refreshAllUI();
 
-    // Jika belum ada lokasi aktif saat pertama dibuka, langsung tampilkan form Lokasi
+    // Otomatis tampilkan form Lokasi jika belum ada sesi aktif
     if (!LiamDB.getActiveLocation()) {
-      this.openNewLocationModal(true);
+      setTimeout(() => this.openNewLocationModal(true), 280);
     }
   },
 
-  // Efek Motion Graphic: Gelombang sentuhan (Ripple) & Animasi Scroll
-  initMotionEffects() {
+  // ==========================================================================
+  // MOTION GRAPHIC ENGINE (60FPS GPU-ACCELERATED)
+  // ==========================================================================
+  initMotionPhysics() {
+    // 1. Shockwave Ripple pada setiap sentuhan tombol/tile/nav
     document.addEventListener('pointerdown', (e) => {
-      const target = e.target.closest('.btn, .pill, .nav-btn, .step-btn');
+      const target = e.target.closest('.btn, .pill, .nav-btn, .step-btn, .squircle-tile');
       if (!target) return;
 
       const rect = target.getBoundingClientRect();
@@ -43,40 +49,244 @@ const LiamApp = {
       wave.style.top = `${e.clientY - rect.top - size / 2}px`;
 
       target.appendChild(wave);
-      setTimeout(() => wave.remove(), 520);
+      setTimeout(() => wave.remove(), 560);
     });
 
+    // 2. Interactive 3D Tilt pada Kartu PDT Lokasi
+    const card3d = document.getElementById('pdt3dCard');
+    if (card3d) {
+      card3d.addEventListener('pointermove', (e) => {
+        const rect = card3d.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width - 0.5;
+        const y = (e.clientY - rect.top) / rect.height - 0.5;
+        card3d.style.transform = `rotateY(${x * 24 - 8}deg) rotateX(${-y * 22 + 4}deg) scale(1.03)`;
+      });
+      const resetTilt = () => {
+        card3d.style.transform = 'rotateY(-12deg) rotateX(6deg) rotateZ(-3deg)';
+      };
+      card3d.addEventListener('pointerleave', resetTilt);
+      card3d.addEventListener('pointerup', resetTilt);
+    }
+
+    // 3. 3D Perspective Scroll Reveal untuk daftar kartu
     if ('IntersectionObserver' in window) {
       this.scrollObserver = new IntersectionObserver(
         (entries) => {
-          entries.forEach((entry) => {
+          entries.forEach((entry, idx) => {
             if (entry.isIntersecting) {
+              entry.target.style.transitionDelay = `${Math.min(idx * 25, 150)}ms`;
               entry.target.classList.remove('scroll-hidden');
               entry.target.classList.add('scroll-visible');
               this.scrollObserver.unobserve(entry.target);
             }
           });
         },
-        { threshold: 0.05 }
+        { threshold: 0.04 }
       );
     }
+  },
+
+  // Animasi angka bergulir halus (Kinetic Counter)
+  animateNumber(el, fromVal, toVal, suffix = '') {
+    if (!el) return;
+    if (fromVal === toVal) {
+      el.textContent = `${toVal.toLocaleString('id-ID')}${suffix}`;
+      return;
+    }
+    const duration = 380;
+    const startTime = performance.now();
+    const step = (now) => {
+      const progress = Math.min((now - startTime) / duration, 1);
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+      const current = Math.round(fromVal + (toVal - fromVal) * easeOut);
+      el.textContent = `${current.toLocaleString('id-ID')}${suffix}`;
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   },
 
   switchView(viewName, btn) {
     document.querySelectorAll('.view-section').forEach((v) => v.classList.remove('active'));
     document.querySelectorAll('.nav-btn').forEach((b) => b.classList.remove('active'));
-    document.getElementById('view-' + viewName).classList.add('active');
-    if (btn) btn.classList.add('active');
+
+    const targetView = document.getElementById('view-' + viewName);
+    if (targetView) targetView.classList.add('active');
+
+    if (btn) {
+      btn.classList.add('active');
+    } else {
+      const autoBtn = document.getElementById('nav-' + viewName);
+      if (autoBtn) autoBtn.classList.add('active');
+    }
 
     this.refreshAllUI();
   },
 
+  jumpToSection(viewName, elementId) {
+    this.switchView(viewName, null);
+    setTimeout(() => {
+      const el = document.getElementById(elementId);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 120);
+  },
+
   refreshAllUI() {
-    this.updateLocationBanner();
-    this.refreshHeaderAndStats();
+    this.updateHeroAnd3DCard();
+    this.updateAnalyticsDonut();
     this.renderArticleList();
     this.renderLocationsList();
     this.renderKamusList();
+  },
+
+  // ==========================================================================
+  // HERO GREETING, 3D LOCATION CARD & METRICS
+  // ==========================================================================
+  updateHeroAnd3DCard() {
+    const hour = new Date().getHours();
+    let greet = 'Selamat Malam,';
+    if (hour >= 4 && hour < 11) greet = 'Selamat Pagi,';
+    else if (hour >= 11 && hour < 15) greet = 'Selamat Siang,';
+    else if (hour >= 15 && hour < 18) greet = 'Selamat Sore,';
+
+    const greetEl = document.getElementById('heroGreetingTime');
+    const opEl = document.getElementById('heroOperatorName');
+    if (greetEl) greetEl.textContent = greet;
+    if (opEl) opEl.innerHTML = `${LiamDB.config.operator || 'Liam'} <span class="hero-star">✦</span>`;
+
+    const loc = LiamDB.getActiveLocation();
+    const cardLocEl = document.getElementById('cardLocCode');
+    const cardDocEl = document.getElementById('cardDocNo');
+    const cardDateEl = document.getElementById('cardDate');
+    const cardInspEl = document.getElementById('cardInspector');
+    const topStoreTag = document.getElementById('heroStoreTag');
+
+    if (topStoreTag) {
+      topStoreTag.textContent = `${LiamDB.config.storeCode} • TERMINAL PDT`;
+    }
+
+    if (loc) {
+      if (cardLocEl) cardLocEl.textContent = loc.noLokasi;
+      if (cardDocEl) cardDocEl.textContent = `DOC: ${loc.noDocument}`;
+      if (cardDateEl) cardDateEl.textContent = loc.tanggal;
+      if (cardInspEl) cardInspEl.textContent = loc.pemeriksa.toUpperCase();
+    } else {
+      if (cardLocEl) cardLocEl.textContent = 'TAP ISI LOKASI';
+      if (cardDocEl) cardDocEl.textContent = 'DOC: BELUM SET';
+      if (cardDateEl) cardDateEl.textContent = new Date().toISOString().slice(0, 10);
+      if (cardInspEl) cardInspEl.textContent = (LiamDB.config.operator || 'LIAM').toUpperCase();
+    }
+
+    // Hitung total Pcs lokasi aktif & keseluruhan
+    const arts = Object.values(LiamDB.articles);
+    const combined = LiamDB.getCombinedScansMap();
+    const totalAllScan = Object.values(combined).reduce((sum, q) => sum + q, 0);
+    const totalSystemQty = arts.reduce((sum, a) => sum + (a.systemQty || 0), 0);
+
+    const locPcs = loc ? Object.values(loc.scans || {}).reduce((a, b) => a + b, 0) : 0;
+    const heroNumEl = document.getElementById('heroTotalPcs');
+    this.animateNumber(heroNumEl, this.lastDisplayedPcs, locPcs, ' Pcs');
+    this.lastDisplayedPcs = locPcs;
+
+    const pct = totalSystemQty > 0 ? Math.min(100, ((totalAllScan / totalSystemQty) * 100)).toFixed(1) : '0.0';
+    const matchEl = document.getElementById('heroMatchRate');
+    const subEl = document.getElementById('heroSubStats');
+    if (matchEl) matchEl.textContent = `↑ ${pct}%`;
+    if (subEl) subEl.textContent = `Total semua lokasi: ${totalAllScan} / ${totalSystemQty} Sistem`;
+
+    // Update Stat Cards di Tab Data
+    const stArt = document.getElementById('statArticles');
+    const stKam = document.getElementById('statKamus');
+    const stScn = document.getElementById('statScanned');
+    if (stArt) stArt.textContent = arts.length;
+    if (stKam) stKam.textContent = Object.keys(LiamDB.kamus).length;
+    if (stScn) stScn.textContent = totalAllScan;
+  },
+
+  // ==========================================================================
+  // GRAFIK DONAT SVG DINAMIS (TAB ANALYTICS)
+  // ==========================================================================
+  updateAnalyticsDonut() {
+    const arts = Object.values(LiamDB.articles);
+    const combined = LiamDB.getCombinedScansMap();
+
+    let klopCount = 0;
+    let selisihCount = 0;
+    let kosongCount = 0;
+
+    arts.forEach((a) => {
+      const scn = combined[a.kodeArtikel] || 0;
+      if (scn === 0 && a.systemQty > 0) kosongCount++;
+      else if (scn === a.systemQty) klopCount++;
+      else selisihCount++;
+    });
+
+    const total = Math.max(1, arts.length);
+    const circumference = 251.2; // 2 * PI * 40
+
+    const pctKlop = Math.round((klopCount / total) * 100);
+    const pctSelisih = Math.round((selisihCount / total) * 100);
+    const pctKosong = Math.max(0, 100 - pctKlop - pctSelisih);
+
+    const lenKlop = (klopCount / total) * circumference;
+    const lenSelisih = (selisihCount / total) * circumference;
+    const lenKosong = (kosongCount / total) * circumference;
+
+    const segKlop = document.getElementById('donutSegKlop');
+    const segSelisih = document.getElementById('donutSegSelisih');
+    const segKosong = document.getElementById('donutSegKosong');
+
+    if (segKlop && segSelisih && segKosong) {
+      segKlop.style.strokeDasharray = `${lenKlop} ${circumference}`;
+      segKlop.style.strokeDashoffset = '0';
+
+      segSelisih.style.strokeDasharray = `${lenSelisih} ${circumference}`;
+      segSelisih.style.strokeDashoffset = `${-lenKlop}`;
+
+      segKosong.style.strokeDasharray = `${lenKosong} ${circumference}`;
+      segKosong.style.strokeDashoffset = `${-(lenKlop + lenSelisih)}`;
+    }
+
+    const centerPct = document.getElementById('donutCenterPct');
+    if (centerPct) centerPct.textContent = `${arts.length ? pctKlop : 0}%`;
+
+    const setTxt = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = val;
+    };
+
+    setTxt('legendKlopPct', `${arts.length ? pctKlop : 0}%`);
+    setTxt('legendKlopVal', `${klopCount} SKU`);
+    setTxt('legendSelisihPct', `${arts.length ? pctSelisih : 0}%`);
+    setTxt('legendSelisihVal', `${selisihCount} SKU`);
+    setTxt('legendKosongPct', `${arts.length ? pctKosong : 0}%`);
+    setTxt('legendKosongVal', `${kosongCount} SKU`);
+
+    // Ringkasan Per-Lokasi di Analytics
+    const summaryBox = document.getElementById('analyticsLocSummary');
+    if (summaryBox) {
+      const locs = Object.values(LiamDB.locations);
+      if (locs.length === 0) {
+        summaryBox.innerHTML = `<p style="font-size:11.5px; color:var(--text-muted);">Belum ada sesi lokasi tersimpan.</p>`;
+      } else {
+        summaryBox.innerHTML = locs
+          .map((l) => {
+            const pcs = Object.values(l.scans || {}).reduce((a, b) => a + b, 0);
+            const sku = Object.keys(l.scans || {}).length;
+            return `
+              <div class="legend-row" style="border-bottom:1px solid rgba(52,211,153,0.1); padding:7px 0;">
+                <div class="legend-left">
+                  <span class="legend-dot" style="background:var(--emerald-bright);"></span>
+                  <div>
+                    <div style="font-weight:700; color:#fff;">${l.noLokasi}</div>
+                    <div style="font-size:10px; color:var(--text-muted);">Doc: ${l.noDocument} • ${l.pemeriksa} (${l.tanggal})</div>
+                  </div>
+                </div>
+                <div class="legend-right" style="color:var(--champagne);">${pcs} Pcs (${sku} SKU)</div>
+              </div>`;
+          })
+          .join('');
+      }
+    }
   },
 
   // ==========================================================================
@@ -89,7 +299,9 @@ const LiamApp = {
     document.getElementById('locInputTanggal').value = new Date().toISOString().slice(0, 10);
 
     const cancelBtn = document.getElementById('btnCancelLocModal');
-    cancelBtn.style.display = isInitial && !LiamDB.getActiveLocation() ? 'none' : 'inline-flex';
+    if (cancelBtn) {
+      cancelBtn.style.display = isInitial && !LiamDB.getActiveLocation() ? 'none' : 'inline-flex';
+    }
     document.getElementById('locationModal').classList.add('open');
   },
 
@@ -100,7 +312,7 @@ const LiamApp = {
     const tanggal = document.getElementById('locInputTanggal').value;
 
     if (!noLokasi) {
-      alert('Nomor Lokasi wajib diisi (contoh: RAK-A1 / GUDANG-1).');
+      alert('Nomor Lokasi wajib diisi (contoh: RAK-SKE-01 / GUDANG-1).');
       return;
     }
 
@@ -115,9 +327,7 @@ const LiamApp = {
     LiamDB.setActiveLocation(locId);
     this.activeArticleCode = null;
     this.resetLastScanCard();
-    this.refreshAllUI();
-    const scanNav = document.querySelector('.nav-btn');
-    this.switchView('scan', scanNav);
+    this.switchView('scan', document.getElementById('nav-scan'));
   },
 
   deleteLocationSession(locId, e) {
@@ -133,29 +343,13 @@ const LiamApp = {
     }
   },
 
-  updateLocationBanner() {
-    const loc = LiamDB.getActiveLocation();
-    const titleEl = document.getElementById('bannerLocTitle');
-    const subEl = document.getElementById('bannerLocSub');
-
-    if (!loc) {
-      titleEl.textContent = '📍 Belum Ada Lokasi Aktif (Ketuk untuk Buat)';
-      subEl.textContent = 'Isi Nomor Lokasi, Pemeriksa, No Document & Tanggal';
-      return;
-    }
-
-    const locPcs = Object.values(loc.scans || {}).reduce((a, b) => a + b, 0);
-    titleEl.textContent = `📍 ${loc.noLokasi}  •  Doc: ${loc.noDocument}`;
-    subEl.textContent = `Pemeriksa: ${loc.pemeriksa} | Tgl: ${loc.tanggal} | Terhitung: ${locPcs} Pcs`;
-  },
-
   renderLocationsList() {
     const container = document.getElementById('locationsList');
     if (!container) return;
 
     const locs = Object.values(LiamDB.locations).reverse();
     if (locs.length === 0) {
-      container.innerHTML = `<p style="text-align:center; color:var(--muted-dim); font-size:12px; margin-top:16px;">Belum ada lokasi tersimpan. Tekan tombol "+ Buat Sesi Lokasi Baru" di atas.</p>`;
+      container.innerHTML = `<p style="text-align:center; color:var(--text-muted); font-size:12px; margin-top:16px;">Belum ada lokasi tersimpan. Tekan "+ Buat Sesi Lokasi Baru".</p>`;
       return;
     }
 
@@ -175,7 +369,7 @@ const LiamApp = {
                 <div style="font-size:11.5px; color:#d1fae5; margin-top:3px;">
                   No Doc: <strong>${loc.noDocument}</strong> • Tgl: ${loc.tanggal}
                 </div>
-                <div style="font-size:11px; color:var(--muted-dim); margin-top:2px;">
+                <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">
                   Pemeriksa: ${loc.pemeriksa} • ${skuCount} Artikel (${totalPcs} Pcs)
                 </div>
               </div>
@@ -200,17 +394,17 @@ const LiamApp = {
 
     if (LiamScanner.isRunning) {
       await LiamScanner.stop();
-      wrapper.classList.remove('scanning');
+      if (wrapper) wrapper.classList.remove('scanning');
       btn.textContent = '▶ Mulai Scan';
       btn.className = 'btn btn-champagne';
     } else {
       try {
         await LiamScanner.start((code) => this.processBarcode(code));
-        wrapper.classList.add('scanning');
+        if (wrapper) wrapper.classList.add('scanning');
         btn.textContent = '⏹ Stop';
         btn.className = 'btn btn-danger';
       } catch (e) {
-        alert('Kamera gagal dibuka. Pastikan izin kamera aktif & dibuka via HTTPS.');
+        alert('Kamera gagal dibuka. Pastikan izin kamera diizinkan & dibuka via HTTPS.');
       }
     }
   },
@@ -218,8 +412,8 @@ const LiamApp = {
   async toggleFlash() {
     const isOn = await LiamScanner.toggleTorch();
     const btn = document.getElementById('btnTorch');
-    btn.style.borderColor = isOn ? 'var(--warning)' : 'var(--border)';
-    btn.style.color = isOn ? 'var(--warning)' : 'var(--text)';
+    btn.style.borderColor = isOn ? 'var(--warning)' : 'var(--glass-border)';
+    btn.style.color = isOn ? 'var(--warning)' : 'var(--text-main)';
   },
 
   toggleMode() {
@@ -230,6 +424,7 @@ const LiamApp = {
 
   resetLastScanCard() {
     const card = document.getElementById('lastScanCard');
+    if (!card) return;
     card.className = 'last-scan-card';
     document.getElementById('lsStatus').textContent = 'SIAP MEMINDAI BARCODE';
     document.getElementById('lsBarcode').textContent = 'BC: -';
@@ -268,7 +463,6 @@ const LiamApp = {
       document.getElementById('btnPairUnknown').style.display = 'none';
 
       this.updateLastScanNumbers(article, newQty);
-      this.popHeaderBadge();
       this.refreshAllUI();
     } else {
       LiamScanner.beep(false);
@@ -283,14 +477,6 @@ const LiamApp = {
       document.getElementById('lsActionRow').style.display = 'none';
       document.getElementById('btnPairUnknown').style.display = 'block';
     }
-  },
-
-  popHeaderBadge() {
-    const badge = document.getElementById('headerTotalScan');
-    badge.classList.remove('pop');
-    void badge.offsetWidth;
-    badge.classList.add('pop');
-    setTimeout(() => badge.classList.remove('pop'), 220);
   },
 
   updateLastScanNumbers(article, locQty) {
@@ -311,7 +497,6 @@ const LiamApp = {
     this.refreshAllUI();
   },
 
-  // Ketuk angka Qty untuk input jumlah langsung (misal 12 dus sekaligus)
   promptCustomQty() {
     if (!this.activeArticleCode || !LiamDB.articles[this.activeArticleCode]) return;
     const art = LiamDB.articles[this.activeArticleCode];
@@ -355,7 +540,7 @@ const LiamApp = {
       .slice(0, 15);
 
     if (matches.length === 0) {
-      box.innerHTML = `<p style="font-size:11px; color:var(--muted-dim); margin-top:6px;">Tidak ada artikel cocok di Master.</p>`;
+      box.innerHTML = `<p style="font-size:11px; color:var(--text-muted); margin-top:6px;">Tidak ada artikel cocok di Master.</p>`;
       return;
     }
 
@@ -407,7 +592,7 @@ const LiamApp = {
     document.getElementById('detailMatrix').innerHTML = siblings
       .map(
         (s) => `
-        <div style="display:flex; justify-content:space-between; padding:6px 9px; background:rgba(6,18,14,0.85); border:1px solid var(--border); border-radius:8px; margin-bottom:4px; font-size:11.5px;">
+        <div style="display:flex; justify-content:space-between; padding:6px 9px; background:rgba(4,15,11,0.85); border:1px solid var(--glass-border); border-radius:8px; margin-bottom:4px; font-size:11.5px;">
           <span><strong style="color:var(--champagne);">${s.kodeArtikel.slice(-3)}</strong> — ${s.kodeArtikel}</span>
           <span>Sis: <strong>${s.systemQty}</strong> | Lok: <strong style="color:var(--emerald-bright);">${s.activeScanQty}</strong></span>
         </div>`
@@ -446,8 +631,11 @@ const LiamApp = {
   },
 
   renderArticleList() {
-    const q = document.getElementById('searchBox').value.toLowerCase();
+    const searchEl = document.getElementById('searchBox');
     const container = document.getElementById('articleList');
+    if (!container) return;
+
+    const q = searchEl ? searchEl.value.toLowerCase() : '';
     const all = Object.values(LiamDB.articles);
     const combined = LiamDB.getCombinedScansMap();
 
@@ -463,7 +651,7 @@ const LiamApp = {
     });
 
     if (filtered.length === 0) {
-      container.innerHTML = `<p style="text-align:center; color:var(--muted-dim); font-size:12px; margin-top:20px;">Tidak ada data artikel.</p>`;
+      container.innerHTML = `<p style="text-align:center; color:var(--text-muted); font-size:12px; margin-top:16px;">Belum ada data artikel. Import file stok di tab Data.</p>`;
       return;
     }
 
@@ -472,6 +660,7 @@ const LiamApp = {
       .map((a) => {
         const locQty = LiamDB.getScannedQty(a.kodeArtikel);
         const totalAll = combined[a.kodeArtikel] || 0;
+        const sizeTag = a.kodeArtikel.slice(-3);
 
         let badge = `<span class="badge badge-kosong">0 SCAN</span>`;
         if (totalAll > 0 && totalAll === a.systemQty) badge = `<span class="badge badge-ada">KLOP</span>`;
@@ -479,14 +668,15 @@ const LiamApp = {
 
         return `
           <div class="item-card scroll-hidden" onclick="LiamApp.openArticleDetail('${a.kodeArtikel}')">
+            <div class="item-avatar">${sizeTag}</div>
             <div class="item-main">
               <div class="item-code">${a.kodeArtikel}</div>
               <div class="item-desc">${a.namaArtikel}</div>
-              <div class="item-sub">Sistem: ${a.systemQty} • Harga: Rp ${a.harga.toLocaleString('id-ID')}</div>
+              <div class="item-sub">Sistem: ${a.systemQty} • Rp ${a.harga.toLocaleString('id-ID')}</div>
             </div>
             <div class="item-right">
               ${badge}
-              <div style="font-size:14px; font-weight:800; color:var(--champagne); margin-top:4px;">${locQty}</div>
+              <div style="font-size:14px; font-weight:800; color:var(--champagne); margin-top:4px;">+${locQty}</div>
             </div>
           </div>`;
       })
@@ -513,17 +703,17 @@ const LiamApp = {
       .slice(0, 25);
 
     if (entries.length === 0) {
-      container.innerHTML = `<p style="font-size:11px; color:var(--muted-dim);">Tidak ada data barcode.</p>`;
+      container.innerHTML = `<p style="font-size:11px; color:var(--text-muted);">Tidak ada data barcode.</p>`;
       return;
     }
 
     container.innerHTML = entries
       .map(
         (k) => `
-        <div style="display:flex; justify-content:space-between; align-items:center; padding:7px 9px; background:rgba(6,18,14,0.85); border:1px solid var(--border); border-radius:9px; margin-bottom:5px; font-size:11.5px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:7px 9px; background:rgba(4,15,11,0.85); border:1px solid var(--glass-border); border-radius:9px; margin-bottom:5px; font-size:11.5px;">
           <div>
             <strong style="color:var(--champagne);">${k.barcode}</strong> → <span style="color:var(--emerald-bright);">${k.kodeArtikel}</span>
-            <div style="font-size:10px; color:var(--muted-dim);">${k.tipe}</div>
+            <div style="font-size:10px; color:var(--text-muted);">${k.tipe}</div>
           </div>
           <button class="btn btn-danger" style="padding:4px 8px; font-size:10px;" onclick="LiamApp.deleteKamusEntry('${k.barcode}')">✕</button>
         </div>`
@@ -564,18 +754,6 @@ const LiamApp = {
     LiamDB.config.operator = document.getElementById('cfgOperator').value.trim() || 'Liam';
     LiamDB.saveAll();
     this.refreshAllUI();
-  },
-
-  refreshHeaderAndStats() {
-    const arts = Object.values(LiamDB.articles);
-    const combined = LiamDB.getCombinedScansMap();
-    const totalAllScan = Object.values(combined).reduce((sum, q) => sum + q, 0);
-
-    document.getElementById('headerStoreBadge').textContent = `${LiamDB.config.storeCode} • ${LiamDB.config.operator}`;
-    document.getElementById('headerTotalScan').textContent = `${totalAllScan} Pcs`;
-    document.getElementById('statArticles').textContent = arts.length;
-    document.getElementById('statKamus').textContent = Object.keys(LiamDB.kamus).length;
-    document.getElementById('statScanned').textContent = totalAllScan;
   },
 
   resetScans() {
