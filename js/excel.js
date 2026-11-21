@@ -1,10 +1,9 @@
 // ============================================================================
-// LIAMVSCAN EXCEL & CSV ENGINE v1.1 (com.xliamvr.scan)
+// LIAMVSCAN EXCEL & CSV ENGINE v2.0 (com.xliamvr.scan)
 // Perbaikan Akurasi Desimal (.00), Gabung Multi-File, & Export Per-Lokasi
 // ============================================================================
 
 const LiamExcel = {
-  // Pembersih angka akurat (menangani "1.00", "299,400.00", maupun "299.400")
   parseCleanNumber(rawVal) {
     if (rawVal === null || rawVal === undefined || rawVal === '') return 0;
     const str = String(rawVal).trim();
@@ -15,7 +14,6 @@ const LiamExcel = {
     return isNaN(num) ? 0 : Math.round(num);
   },
 
-  // 1. Import Master Stok (Bisa upload bertahap: SKE + LOTTO + dll tanpa saling menimpa)
   importMasterFile(file, callback) {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -104,7 +102,6 @@ const LiamExcel = {
           }
         }
 
-        // Gabungkan ke database master yang ada agar bisa multi-brand
         Object.assign(LiamDB.articles, fileArticles);
         LiamDB.saveAll();
         callback(null, { importedArticles, importedBarcodes });
@@ -115,7 +112,6 @@ const LiamExcel = {
     reader.readAsArrayBuffer(file);
   },
 
-  // 2. Import File Kamus Barcode Terpisah
   importKamusFile(file, callback) {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -160,7 +156,6 @@ const LiamExcel = {
     reader.readAsArrayBuffer(file);
   },
 
-  // 3. Export CSV ICC Siap Tarik Sistem (mode: 'ACTIVE' = lokasi ini saja, 'ALL' = gabungan semua lokasi)
   exportCsvIcc(mode = 'ALL') {
     const store = (LiamDB.config.storeCode || 'SSFE').trim().toUpperCase();
     let scanMap = {};
@@ -190,7 +185,6 @@ const LiamExcel = {
     link.click();
   },
 
-  // 4. Export Laporan Audit Selisih + Rincian Per-Lokasi (.xlsx)
   exportAuditExcel() {
     const all = Object.values(LiamDB.articles);
     if (all.length === 0) return alert('Data master artikel masih kosong.');
@@ -216,7 +210,6 @@ const LiamExcel = {
       };
     };
 
-    // Sheet Rincian Per-Lokasi (Nomor Lokasi, Pemeriksa, No Document, Tanggal)
     const locRows = [];
     Object.values(LiamDB.locations).forEach((loc) => {
       Object.entries(loc.scans || {}).forEach(([artCode, qty]) => {
@@ -256,7 +249,6 @@ const LiamExcel = {
     XLSX.writeFile(wb, `Liamvscan_Audit_${LiamDB.config.storeCode}_${tgl}.xlsx`);
   },
 
-  // 5. Export Backup Kamus Barcode Terbaru (.xlsx)
   exportKamusExcel() {
     const entries = Object.values(LiamDB.kamus);
     if (entries.length === 0) return alert('Kamus barcode masih kosong.');
