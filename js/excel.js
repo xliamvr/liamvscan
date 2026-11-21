@@ -1,10 +1,21 @@
 // ============================================================================
-// LIAMVSCAN EXCEL & CSV ENGINE (com.xliamvr.scan)
-// Mendukung .xls (MAP Stock Position Report), .xlsx, dan .csv
+// LIAMVSCAN EXCEL & CSV ENGINE v1.1 (com.xliamvr.scan)
+// Perbaikan Akurasi Desimal (.00), Gabung Multi-File, & Export Per-Lokasi
 // ============================================================================
 
 const LiamExcel = {
-  // 1. Import Master Stok (File mentah MAP .xls atau Master Terpisah .xlsx)
+  // Pembersih angka akurat (menangani "1.00", "299,400.00", maupun "299.400")
+  parseCleanNumber(rawVal) {
+    if (rawVal === null || rawVal === undefined || rawVal === '') return 0;
+    const str = String(rawVal).trim();
+    if (/^-?\d{1,3}(\.\d{3})+$/.test(str)) {
+      return parseInt(str.replace(/\./g, ''), 10) || 0;
+    }
+    const num = parseFloat(str.replace(/,/g, ''));
+    return isNaN(num) ? 0 : Math.round(num);
+  },
+
+  // 1. Import Master Stok (Bisa upload bertahap: SKE + LOTTO + dll tanpa saling menimpa)
   importMasterFile(file, callback) {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -16,7 +27,7 @@ const LiamExcel = {
 
         let importedArticles = 0;
         let importedBarcodes = 0;
-        const newArticles = {};
+        const fileArticles = {};
 
         const isRawMap = rows.some(
           (r) => String(r[0]).includes('MITRA ADIPERKASA') || String(r[4]).includes(' / ')
@@ -33,23 +44,24 @@ const LiamExcel = {
             const namaArtikel = parts.slice(1).join(' / ').trim();
             const brand = String(r[0] || '').trim();
             const subCategory = String(r[3] || '').trim();
-            const price = parseInt(String(r[6] || '0').replace(/\D/g, ''), 10) || 0;
-            const qty = parseInt(String(r[7] || '0').replace(/[^0-9-]/g, ''), 10) || 0;
+            const price = this.parseCleanNumber(r[6]);
+            const qty = this.parseCleanNumber(r[7]);
 
-            if (!newArticles[kodeArtikel]) {
-              newArticles[kodeArtikel] = {
+            if (!fileArticles[kodeArtikel]) {
+              fileArticles[kodeArtikel] = {
                 kodeArtikel,
                 namaArtikel,
                 brand,
                 subCategory,
                 harga: price,
-                systemQty: qty,
-                scannedQty: LiamDB.articles[kodeArtikel]?.scannedQty || 0
+                systemQty: qty
               };
               importedArticles++;
             } else {
-              if (price > newArticles[kodeArtikel].harga) newArticles[kodeArtikel].harga = price;
-              newArticles[kodeArtikel].systemQty += qty;
+              if (price > fileArticles[kodeArtikel].harga) {
+                fileArticles[kodeArtikel].harga = price;
+              }
+              fileArticles[kodeArtikel].systemQty += qty;
             }
 
             const tipe = bcCol.startsWith('100') ? 'Internal MAP (100...)' : 'UPC Pabrik / Box';
@@ -80,22 +92,22 @@ const LiamExcel = {
             const kodeArtikel = String(r[idxCode] || '').trim().toUpperCase();
             if (!kodeArtikel || kodeArtikel.includes('TOTAL')) continue;
 
-            newArticles[kodeArtikel] = {
+            fileArticles[kodeArtikel] = {
               kodeArtikel,
               namaArtikel: idxName !== -1 ? String(r[idxName] || '').trim() : kodeArtikel,
               brand: idxBrand !== -1 ? String(r[idxBrand] || '').trim() : '',
               subCategory: idxSub !== -1 ? String(r[idxSub] || '').trim() : '',
-              harga: idxPrice !== -1 ? parseInt(String(r[idxPrice]).replace(/\D/g, ''), 10) || 0 : 0,
-              systemQty: idxQty !== -1 ? parseInt(String(r[idxQty]).replace(/[^0-9-]/g, ''), 10) || 0 : 0,
-              scannedQty: LiamDB.articles[kodeArtikel]?.scannedQty || 0
+              harga: idxPrice !== -1 ? this.parseCleanNumber(r[idxPrice]) : 0,
+              systemQty: idxQty !== -1 ? this.parseCleanNumber(r[idxQty]) : 0
             };
             importedArticles++;
           }
         }
 
-        LiamDB.articles = newArticles;
+        // Gabungkan ke database master yang ada agar bisa multi-brand
+        Object.assign(LiamDB.articles, fileArticles);
         LiamDB.saveAll();
-        callback(null, { importedArticles, importedBarcodes, isRawMap });
+        callback(null, { importedArticles, importedBarcodes });
       } catch (err) {
         callback(err);
       }
@@ -148,34 +160,48 @@ const LiamExcel = {
     reader.readAsArrayBuffer(file);
   },
 
-  // 3. Export CSV ICC Siap Tarik Sistem (SSFE,KODE_ARTIKEL,QTY tanpa header)
-  exportCsvIcc() {
+  // 3. Export CSV ICC Siap Tarik Sistem (mode: 'ACTIVE' = lokasi ini saja, 'ALL' = gabungan semua lokasi)
+  exportCsvIcc(mode = 'ALL') {
     const store = (LiamDB.config.storeCode || 'SSFE').trim().toUpperCase();
-    const scannedList = Object.values(LiamDB.articles).filter((a) => a.scannedQty > 0);
+    let scanMap = {};
+    let suffixName = 'ALL_LOKASI';
 
-    if (scannedList.length === 0) {
-      alert('Belum ada barang yang terscan (Qty > 0).');
+    if (mode === 'ACTIVE') {
+      const loc = LiamDB.getActiveLocation();
+      if (!loc) return alert('Pilih atau buat sesi lokasi terlebih dahulu.');
+      scanMap = loc.scans || {};
+      suffixName = loc.noLokasi.replace(/[^A-Z0-9_-]/gi, '_');
+    } else {
+      scanMap = LiamDB.getCombinedScansMap();
+    }
+
+    const entries = Object.entries(scanMap).filter(([, qty]) => qty > 0);
+    if (entries.length === 0) {
+      alert('Belum ada barang yang terscan (Qty > 0) pada pilihan ini.');
       return;
     }
 
-    const csvLines = scannedList.map((a) => `${store},${a.kodeArtikel},${a.scannedQty}`);
+    const csvLines = entries.map(([kodeArtikel, qty]) => `${store},${kodeArtikel},${qty}`);
     const blob = new Blob([csvLines.join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const stamp = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
     link.href = URL.createObjectURL(blob);
-    link.download = `ICC_${store}_${stamp}.csv`;
+    link.download = `ICC_${store}_${suffixName}_${stamp}.csv`;
     link.click();
   },
 
-  // 4. Export Laporan Audit Selisih (.xlsx)
+  // 4. Export Laporan Audit Selisih + Rincian Per-Lokasi (.xlsx)
   exportAuditExcel() {
     const all = Object.values(LiamDB.articles);
-    if (all.length === 0) return alert('Data artikel masih kosong.');
+    if (all.length === 0) return alert('Data master artikel masih kosong.');
+
+    const combined = LiamDB.getCombinedScansMap();
 
     const mapRow = (a) => {
-      const selisih = a.scannedQty - a.systemQty;
+      const totalScan = combined[a.kodeArtikel] || 0;
+      const selisih = totalScan - a.systemQty;
       let status = 'KLOP';
-      if (a.scannedQty === 0 && a.systemQty > 0) status = 'TIDAK ADA (0 SCAN)';
+      if (totalScan === 0 && a.systemQty > 0) status = 'TIDAK ADA (0 SCAN)';
       else if (selisih !== 0) status = selisih > 0 ? 'LEBIH (+)' : 'KURANG (-)';
 
       return {
@@ -184,22 +210,45 @@ const LiamExcel = {
         Nama_Artikel: a.namaArtikel,
         SubCategory: a.subCategory,
         Stok_Sistem: a.systemQty,
-        Hasil_Scan: a.scannedQty,
+        Total_Scan_Semua_Lokasi: totalScan,
         Selisih: selisih,
         Status: status
       };
     };
 
+    // Sheet Rincian Per-Lokasi (Nomor Lokasi, Pemeriksa, No Document, Tanggal)
+    const locRows = [];
+    Object.values(LiamDB.locations).forEach((loc) => {
+      Object.entries(loc.scans || {}).forEach(([artCode, qty]) => {
+        if (qty <= 0) return;
+        const art = LiamDB.articles[artCode];
+        locRows.push({
+          No_Lokasi: loc.noLokasi,
+          No_Document: loc.noDocument,
+          Tanggal: loc.tanggal,
+          Pemeriksa: loc.pemeriksa,
+          Kode_Artikel: artCode,
+          Nama_Artikel: art ? art.namaArtikel : artCode,
+          Qty_Scan: qty
+        });
+      });
+    });
+
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(all.map(mapRow)), 'Semua_Artikel');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(all.map(mapRow)), 'Rekap_Semua_Artikel');
     XLSX.utils.book_append_sheet(
       wb,
-      XLSX.utils.json_to_sheet(all.filter((a) => a.scannedQty === 0).map(mapRow)),
+      XLSX.utils.json_to_sheet(locRows.length ? locRows : [{ Info: 'Belum ada data scan lokasi' }]),
+      'Rincian_Per_Lokasi'
+    );
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.json_to_sheet(all.filter((a) => (combined[a.kodeArtikel] || 0) === 0).map(mapRow)),
       'Tidak_Ada'
     );
     XLSX.utils.book_append_sheet(
       wb,
-      XLSX.utils.json_to_sheet(all.filter((a) => a.scannedQty !== a.systemQty).map(mapRow)),
+      XLSX.utils.json_to_sheet(all.filter((a) => (combined[a.kodeArtikel] || 0) !== a.systemQty).map(mapRow)),
       'Selisih_SO'
     );
 
