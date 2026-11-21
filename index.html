@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#0b1120" />
+  <meta name="theme-color" content="#030a08" />
   <title>Liamvscan — Retail PDT Terminal</title>
   <link rel="manifest" href="./manifest.json" />
   <link rel="stylesheet" href="./css/style.css" />
@@ -12,7 +12,7 @@
 </head>
 <body>
 
-  <!-- HEADER PDT -->
+  <!-- HEADER PDT GLASS -->
   <header class="pdt-header">
     <div class="brand-title">
       <h1>Liamvscan</h1>
@@ -21,17 +21,28 @@
     <span class="scan-counter-badge" id="headerTotalScan">0 Pcs</span>
   </header>
 
-  <!-- VIEW 1: SPLIT-SCREEN SCANNER (ALA STOCK COUNT) -->
+  <!-- VIEW 1: SPLIT-SCREEN SCANNER -->
   <main id="view-scan" class="view-section active">
-    <div class="camera-wrapper">
+    <!-- BANNER LOKASI AKTIF -->
+    <div class="location-banner" onclick="LiamApp.switchView('locations', document.getElementById('navLocBtn'))">
+      <div>
+        <div class="loc-info-title" id="bannerLocTitle">📍 Belum Ada Lokasi Aktif</div>
+        <div class="loc-info-sub" id="bannerLocSub">Ketuk untuk mengisi Nomor Lokasi, Pemeriksa & No Doc</div>
+      </div>
+      <span style="font-size:12px; color:var(--champagne); font-weight:800;">Ganti ›</span>
+    </div>
+
+    <!-- KAMERA + GARIS LASER -->
+    <div id="cameraWrapper" class="camera-wrapper">
       <div id="reader"></div>
+      <div class="laser-line"></div>
       <div id="scanFlashOverlay" class="flash-overlay"></div>
     </div>
 
     <div class="cam-controls">
-      <button id="btnToggleCam" class="btn btn-primary" onclick="LiamApp.toggleCamera()">▶ Mulai Scan</button>
-      <button id="btnTorch" class="btn btn-dark" onclick="LiamApp.toggleFlash()">🔦 Flash</button>
-      <button id="btnScanMode" class="btn btn-dark" onclick="LiamApp.toggleMode()">⚡ Auto</button>
+      <button id="btnToggleCam" class="btn btn-champagne" onclick="LiamApp.toggleCamera()">▶ Mulai Scan</button>
+      <button id="btnTorch" class="btn btn-glass" onclick="LiamApp.toggleFlash()">🔦 Flash</button>
+      <button id="btnScanMode" class="btn btn-glass" onclick="LiamApp.toggleMode()">⚡ Auto</button>
     </div>
 
     <!-- KARTU BARANG TERAKHIR TERSCAN -->
@@ -41,15 +52,15 @@
         <span id="lsBarcode">BC: -</span>
       </div>
       <div class="ls-code" id="lsArticleCode">Arahkan kamera ke barcode dus / hangtag</div>
-      <div class="ls-name" id="lsArticleName">Upload file stok di tab Data & Excel jika belum ada</div>
+      <div class="ls-name" id="lsArticleName">Hasil scan tersimpan otomatis ke lokasi aktif</div>
 
       <div class="ls-bottom" id="lsActionRow" style="display:none;">
-        <div style="font-size:12px;">
-          Sistem: <strong id="lsSysQty">0</strong> • Selisih: <strong id="lsDiffQty">0</strong>
+        <div style="font-size:11.5px; color:var(--muted-dim);">
+          Sistem: <strong style="color:#fff;" id="lsSysQty">0</strong> • Total Selisih: <strong style="color:var(--champagne);" id="lsDiffQty">0</strong>
         </div>
         <div class="qty-stepper">
           <button class="step-btn" onclick="LiamApp.adjustActiveQty(-1)">−</button>
-          <span id="lsScanQty" style="font-size:18px; font-weight:800; min-width:26px; text-align:center;">0</span>
+          <span id="lsScanQty" class="qty-tap-pill" onclick="LiamApp.promptCustomQty()" title="Ketuk untuk isi angka langsung">0</span>
           <button class="step-btn" onclick="LiamApp.adjustActiveQty(1)">+</button>
         </div>
       </div>
@@ -62,130 +73,189 @@
     <!-- INPUT MANUAL & SEARCH -->
     <div class="manual-bar">
       <input type="text" id="manualInput" placeholder="Ketik barcode / kode artikel manual..." />
-      <button class="btn btn-dark" onclick="LiamApp.submitManual()">Input</button>
+      <button class="btn btn-glass" onclick="LiamApp.submitManual()">Input</button>
     </div>
 
     <input type="text" id="searchBox" placeholder="🔍 Cari kode artikel / nama / size..." oninput="LiamApp.renderArticleList()" style="margin-top:8px;" />
 
     <div class="filter-row">
       <button class="pill active" onclick="LiamApp.setFilter('ALL', this)">Semua</button>
-      <button class="pill" onclick="LiamApp.setFilter('ADA', this)">✅ Ada</button>
-      <button class="pill" onclick="LiamApp.setFilter('KOSONG', this)">❌ Tidak Ada (0)</button>
+      <button class="pill" onclick="LiamApp.setFilter('ADA', this)">✅ Ada di Lokasi</button>
+      <button class="pill" onclick="LiamApp.setFilter('KOSONG', this)">❌ Belum Scan (0)</button>
       <button class="pill" onclick="LiamApp.setFilter('SELISIH', this)">⚠️ Selisih</button>
     </div>
 
     <div id="articleList"></div>
   </main>
 
-  <!-- VIEW 2: DATA EXCEL & EXPORT -->
+  <!-- VIEW 2: LOKASI TERSIMPAN -->
+  <section id="view-locations" class="view-section">
+    <div class="panel">
+      <h3>📍 Manajemen Sesi Per-Lokasi</h3>
+      <p>Simpan hasil scan terpisah per rak, meja, atau area gudang lengkap dengan Nomor Lokasi, Pemeriksa, No Document, dan Tanggal.</p>
+      <button class="btn btn-champagne btn-full" onclick="LiamApp.openNewLocationModal(false)">
+        ➕ Buat Sesi Lokasi Baru
+      </button>
+    </div>
+
+    <div id="locationsList"></div>
+  </section>
+
+  <!-- VIEW 3: DATA EXCEL, KAMUS & EXPORT -->
   <section id="view-data" class="view-section">
     <div class="stats-3">
       <div class="stat-card">
-        <div class="num" style="color:var(--primary);" id="statArticles">0</div>
+        <div class="num" style="color:var(--emerald-bright);" id="statArticles">0</div>
         <div class="lbl">Artikel Master</div>
       </div>
       <div class="stat-card">
-        <div class="num" style="color:var(--accent);" id="statKamus">0</div>
+        <div class="num" style="color:var(--champagne);" id="statKamus">0</div>
         <div class="lbl">Kamus Barcode</div>
       </div>
       <div class="stat-card">
         <div class="num" style="color:var(--warning);" id="statScanned">0</div>
-        <div class="lbl">Total Scanned</div>
+        <div class="lbl">Total Semua Lok</div>
       </div>
     </div>
 
     <div class="panel">
-      <h3>1. Import Master Stok (File Mentah MAP / Master Excel)</h3>
-      <p>Upload file <b>.xls</b> mentah (seperti <i>SKE FW 19 NOV 2026.xls</i>) atau file <b>Liamvscan_Master_Stok.xlsx</b>.</p>
+      <h3>1. Import Master Stok (Bisa Gabung Multi-Brand)</h3>
+      <p>Upload file <b>.xls</b> mentah MAP (misal Skechers lalu lanjut Lotto) atau <b>Liamvscan_Master_Stok.xlsx</b>.</p>
       <input type="file" id="fileMaster" accept=".xls,.xlsx,.csv" onchange="LiamApp.handleImportMaster(event)" />
     </div>
 
     <div class="panel">
       <h3>2. Import Kamus Barcode Terpisah</h3>
-      <p>Upload file <b>Liamvscan_Kamus_Barcode.xlsx</b> untuk menghubungkan barcode dus pabrik ke Kode Artikel.</p>
+      <p>Upload file <b>Liamvscan_Kamus_Barcode.xlsx</b> untuk menghubungkan barcode pabrik ke Kode Artikel.</p>
       <input type="file" id="fileKamus" accept=".xls,.xlsx,.csv" onchange="LiamApp.handleImportKamus(event)" />
     </div>
 
     <div class="panel">
-      <h3>3. Export Hasil Jadi (3 Format Terpisah)</h3>
-      <button class="btn btn-accent btn-full" onclick="LiamExcel.exportCsvIcc()">📄 Download CSV ICC (Siap Tarik Sistem)</button>
-      <button class="btn btn-primary btn-full" onclick="LiamExcel.exportAuditExcel()">📊 Download Laporan Audit Selisih (.xlsx)</button>
-      <button class="btn btn-dark btn-full" onclick="LiamExcel.exportKamusExcel()">🗂️ Backup Kamus Barcode Terbaru (.xlsx)</button>
+      <h3>3. Export Hasil Jadi</h3>
+      <button class="btn btn-emerald btn-full" onclick="LiamExcel.exportCsvIcc('ALL')">📄 Download CSV ICC (Gabungan Semua Lokasi)</button>
+      <button class="btn btn-champagne btn-full" onclick="LiamExcel.exportCsvIcc('ACTIVE')">📍 Download CSV ICC (Lokasi Aktif Saja)</button>
+      <button class="btn btn-glass btn-full" onclick="LiamExcel.exportAuditExcel()">📊 Download Laporan Audit & Rincian Lokasi (.xlsx)</button>
+      <button class="btn btn-glass btn-full" onclick="LiamExcel.exportKamusExcel()">🗂️ Backup Kamus Barcode Terbaru (.xlsx)</button>
     </div>
 
     <div class="panel">
-      <h3>4. Profil Toko & Reset Sesi</h3>
+      <h3>4. Kelola Kamus Barcode Tersimpan</h3>
+      <input type="text" id="kamusSearchInput" placeholder="Cari nomor barcode atau kode artikel..." oninput="LiamApp.renderKamusList()" style="margin-bottom:8px;" />
+      <div id="kamusListContainer"></div>
+    </div>
+
+    <div class="panel">
+      <h3>5. Profil Toko & Reset Data</h3>
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
         <input type="text" id="cfgStore" placeholder="Kode Toko (SSFE)" onchange="LiamApp.saveConfig()" />
         <input type="text" id="cfgOperator" placeholder="Operator (Liam)" onchange="LiamApp.saveConfig()" />
       </div>
-      <button class="btn btn-warning btn-full" onclick="LiamApp.resetScans()">🔄 Reset Hitungan Scan Saja (Master Aman)</button>
+      <button class="btn btn-warning btn-full" onclick="LiamApp.resetScans()">🔄 Reset Scan Lokasi Aktif Saja</button>
       <button class="btn btn-danger btn-full" onclick="LiamApp.resetAll()">🗑️ Hapus Semua Database</button>
     </div>
   </section>
 
-  <!-- VIEW 3: SYSTEM INFO & DEVELOPER CREDIT -->
+  <!-- VIEW 4: SYSTEM INFO -->
   <section id="view-about" class="view-section">
     <div class="panel">
       <h3>Liamvscan — Retail PDT Terminal</h3>
-      <p style="color:#cbd5e1;">
+      <p style="color:#ecfdf5;">
         <strong>Project ID:</strong> com.xliamvr.scan<br/>
-        <strong>Versi:</strong> v1.0.0 (Build 2026.11)<br/>
+        <strong>Versi:</strong> v1.1.0 (Build 2026.11)<br/>
         <strong>Developer:</strong> Ilham Maulana Nur Al Rasyid<br/>
         <strong>Instagram:</strong> @xliamvr<br/>
         <strong>GitHub:</strong> github.com/xliamvr<br/>
         <strong>Email:</strong> ilhammaulananuralrasyid@gmail.com
       </p>
-      <p style="font-size:11px; color:var(--muted); border-top:1px solid var(--border); padding-top:8px;">
+      <p style="font-size:11px; color:var(--muted-dim); border-top:1px solid var(--border); padding-top:8px;">
         © 2026 xliamvr. All Rights Reserved.
       </p>
     </div>
   </section>
 
-  <!-- MODAL: SAMAKAN / TAUTKAN BARCODE -->
+  <!-- MODAL 1: FORM LOKASI BARU (AWAL SESI) -->
+  <div id="locationModal" class="modal-backdrop">
+    <div class="modal-card">
+      <h3 style="font-size:15px; color:var(--champagne); margin-bottom:10px;">📍 Mulai Sesi Lokasi Baru</h3>
+
+      <div class="form-group">
+        <label>Nomor Lokasi / Rak *</label>
+        <input type="text" id="locInputNomor" placeholder="Contoh: RAK-SKE-01 / GUDANG-A" />
+      </div>
+
+      <div class="form-group">
+        <label>Nama Pemeriksa</label>
+        <input type="text" id="locInputPemeriksa" placeholder="Liam" />
+      </div>
+
+      <div class="form-group">
+        <label>No Document</label>
+        <input type="text" id="locInputDoc" placeholder="Contoh: ICC-SSFE-001" />
+      </div>
+
+      <div class="form-group">
+        <label>Tanggal Pemeriksaan</label>
+        <input type="date" id="locInputTanggal" />
+      </div>
+
+      <button class="btn btn-champagne btn-full" onclick="LiamApp.saveNewLocation()">✅ Simpan & Mulai Scan</button>
+      <button id="btnCancelLocModal" class="btn btn-glass btn-full" onclick="LiamApp.closeModal('locationModal')">Batal</button>
+    </div>
+  </div>
+
+  <!-- MODAL 2: SAMAKAN BARCODE -->
   <div id="pairModal" class="modal-backdrop">
     <div class="modal-card">
-      <h3 style="font-size:15px; margin-bottom:8px;">🔗 Samakan Barcode ke Artikel</h3>
+      <h3 style="font-size:15px; color:var(--champagne); margin-bottom:8px;">🔗 Samakan Barcode ke Artikel</h3>
       <label style="font-size:11px; color:var(--muted);">Nomor Barcode Fisik</label>
       <input type="text" id="pairBarcodeVal" readonly style="margin-bottom:8px; font-weight:700;" />
 
-      <label style="font-size:11px; color:var(--muted);">Cari Artikel yang Sudah Ada di Excel</label>
+      <label style="font-size:11px; color:var(--muted);">Cari Artikel yang Sudah Ada di Master</label>
       <input type="text" id="pairSearchInput" placeholder="Ketik potongan kode / nama sepatu..." oninput="LiamApp.searchPairCandidates()" />
-      <div id="pairCandidates" style="max-height:170px; overflow-y:auto; margin-bottom:10px;"></div>
+      <div id="pairCandidates" style="max-height:160px; overflow-y:auto; margin-bottom:10px;"></div>
 
       <div style="border-top:1px solid var(--border); padding-top:10px; margin-top:6px;">
-        <label style="font-size:11px; color:var(--muted);">Atau Buat Kode Artikel Baru (Jika Belum Ada di Excel)</label>
+        <label style="font-size:11px; color:var(--muted);">Atau Buat Kode Artikel Baru</label>
         <input type="text" id="pairNewCode" placeholder="Contoh: SKESBP2865BK005000" style="margin-top:4px; margin-bottom:6px;" />
         <input type="text" id="pairNewName" placeholder="Nama Artikel & Size (Opsional)" style="margin-bottom:8px;" />
-        <button class="btn btn-accent btn-full" onclick="LiamApp.saveNewPairedArticle()">Simpan & Tambah +1 Scan</button>
+        <button class="btn btn-emerald btn-full" onclick="LiamApp.saveNewPairedArticle()">Simpan & Tambah +1 Scan</button>
       </div>
-      <button class="btn btn-dark btn-full" onclick="LiamApp.closeModal('pairModal')">Batal</button>
+      <button class="btn btn-glass btn-full" onclick="LiamApp.closeModal('pairModal')">Batal</button>
     </div>
   </div>
 
-  <!-- MODAL: DETAIL ARTIKEL & MATRIX SIZE -->
+  <!-- MODAL 3: DETAIL ARTIKEL, EDIT QTY & MATRIX SIZE -->
   <div id="detailModal" class="modal-backdrop">
     <div class="modal-card">
-      <h3 id="detailCode" style="font-size:15px; color:#38bdf8;">-</h3>
-      <p id="detailName" style="font-size:12px; color:#cbd5e1; margin:4px 0 8px 0;">-</p>
-      <div id="detailBarcodes" style="font-size:11px; color:var(--muted); margin-bottom:10px;"></div>
+      <h3 id="detailCode" style="font-size:15px; color:var(--emerald-bright);">-</h3>
+      <p id="detailName" style="font-size:12px; color:#ecfdf5; margin:4px 0 8px 0;">-</p>
+      <div id="detailBarcodes" style="font-size:11px; color:var(--muted-dim); margin-bottom:10px;"></div>
+
+      <div class="form-group">
+        <label>Edit Jumlah Scan di Lokasi Aktif:</label>
+        <div style="display:flex; gap:6px;">
+          <input type="number" id="detailLocQtyInput" min="0" />
+          <button class="btn btn-champagne" onclick="LiamApp.saveDetailQty()">Simpan Qty</button>
+        </div>
+      </div>
 
       <button class="btn btn-warning btn-full" style="margin-bottom:12px;" onclick="LiamApp.pairFromDetail()">
-        📷 Scan / Tambah Barcode Baru untuk Artikel Ini
+        📷 Tambah Barcode Baru untuk Artikel Ini
       </button>
 
-      <h4 style="font-size:12px; color:var(--muted); margin-bottom:6px;">Cek Stok Ukuran Lain (Cross-Size Matrix):</h4>
+      <h4 style="font-size:12px; color:var(--muted); margin-bottom:6px;">Stok Ukuran Lain (Cross-Size Matrix):</h4>
       <div id="detailMatrix"></div>
 
-      <button class="btn btn-dark btn-full" onclick="LiamApp.closeModal('detailModal')">Tutup</button>
+      <button class="btn btn-glass btn-full" onclick="LiamApp.closeModal('detailModal')">Tutup</button>
     </div>
   </div>
 
-  <!-- BOTTOM NAV -->
+  <!-- BOTTOM NAVIGATION -->
   <nav class="bottom-nav">
-    <button class="nav-btn active" onclick="LiamApp.switchView('scan', this)">📷 Scan Cepat</button>
-    <button class="nav-btn" onclick="LiamApp.switchView('data', this)">📊 Data & Excel</button>
-    <button class="nav-btn" onclick="LiamApp.switchView('about', this)">ℹ️ System Info</button>
+    <button class="nav-btn active" onclick="LiamApp.switchView('scan', this)">📷 Scan</button>
+    <button class="nav-btn" id="navLocBtn" onclick="LiamApp.switchView('locations', this)">📍 Lokasi</button>
+    <button class="nav-btn" onclick="LiamApp.switchView('data', this)">📊 Data</button>
+    <button class="nav-btn" onclick="LiamApp.switchView('about', this)">ℹ️ Info</button>
   </nav>
 
   <script src="./js/db.js"></script>
