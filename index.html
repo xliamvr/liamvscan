@@ -5,31 +5,46 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#020806" />
   <title>Liamvscan — Retail PDT Terminal</title>
-  <link rel="manifest" href="./manifest.json" />
-  <link rel="stylesheet" href="./css/style.css" />
+  <link rel="manifest" href="./manifest.json?v=21" />
+  <link rel="stylesheet" href="./css/style.css?v=21" />
+  <script>
+    // Paksa hapus Service Worker & Cache lama agar file JS terbaru langsung jalan
+    (function () {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          regs.forEach(function (r) { r.unregister(); });
+        });
+      }
+      if ('caches' in window) {
+        caches.keys().then(function (keys) {
+          keys.forEach(function (k) { caches.delete(k); });
+        });
+      }
+      window.addEventListener('error', function (e) {
+        if (e.message && e.message.indexOf('Script error') === -1) {
+          alert('Deteksi Error Aplikasi:\n' + e.message + '\nFile: ' + (e.filename || 'index.html'));
+        }
+      });
+    })();
+  </script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
-  <!-- AMBIENT FLOATING ORBS -->
   <div class="ambient-orb orb-1"></div>
   <div class="ambient-orb orb-2"></div>
 
   <div class="app-shell">
 
-    <!-- TOP SYSTEM BAR -->
     <div class="hero-top-tag">
       <span id="heroStoreTag">SSFE • TERMINAL PDT</span>
       <span class="live-dot">LIVE SYNC</span>
     </div>
 
-    <!-- ======================================================================
-         VIEW 1: TERMINAL SCANNER & 3D PDT LOCATION STAGE
-         ====================================================================== -->
+    <!-- VIEW 1: TERMINAL SCANNER & 3D PDT LOCATION STAGE -->
     <main id="view-scan" class="view-section active">
 
-      <!-- HERO GREETING + 3D METALLIC PDT LOCATION CARD -->
       <section class="hero-stage">
         <div class="hero-greeting">
           <h2 id="heroGreetingTime">Selamat Pagi,</h2>
@@ -149,7 +164,6 @@
           <button id="btnScanMode" class="btn btn-glass" onclick="LiamApp.toggleMode()">⚡ Auto</button>
         </div>
 
-        <!-- KARTU HASIL SCAN TERAKHIR -->
         <div id="lastScanCard" class="last-scan-card">
           <div class="ls-top">
             <span id="lsStatus">SIAP MEMINDAI BARCODE</span>
@@ -164,7 +178,7 @@
             </div>
             <div class="qty-stepper">
               <button class="step-btn" onclick="LiamApp.adjustActiveQty(-1)">−</button>
-              <span id="lsScanQty" class="qty-tap-pill" onclick="LiamApp.promptCustomQty()" title="Ketuk untuk isi jumlah langsung">0</span>
+              <span id="lsScanQty" class="qty-tap-pill" onclick="LiamApp.promptCustomQty()">0</span>
               <button class="step-btn" onclick="LiamApp.adjustActiveQty(1)">+</button>
             </div>
           </div>
@@ -174,14 +188,12 @@
           </button>
         </div>
 
-        <!-- INPUT MANUAL -->
         <div class="manual-bar">
           <input type="text" id="manualInput" placeholder="Ketik barcode / kode artikel manual..." />
           <button class="btn btn-emerald" onclick="LiamApp.submitManual()">Input</button>
         </div>
       </section>
 
-      <!-- SEARCH & FILTER LIST ARTIKEL -->
       <input type="text" id="searchBox" placeholder="🔍 Cari kode artikel / nama sepatu / size..." oninput="LiamApp.renderArticleList()" />
 
       <div class="filter-row">
@@ -194,9 +206,7 @@
       <div id="articleList"></div>
     </main>
 
-    <!-- ======================================================================
-         VIEW 2: ANALYTICS & AUDIT DONUT CHART
-         ====================================================================== -->
+    <!-- VIEW 2: ANALYTICS -->
     <section id="view-analytics" class="view-section">
       <div class="glass-panel">
         <div class="analytics-header">
@@ -254,9 +264,7 @@
       </div>
     </section>
 
-    <!-- ======================================================================
-         VIEW 3: MANAJEMEN SESI PER-LOKASI
-         ====================================================================== -->
+    <!-- VIEW 3: MANAJEMEN SESI PER-LOKASI -->
     <section id="view-locations" class="view-section">
       <div class="glass-panel">
         <h3 style="font-size:15px; color:var(--champagne); margin-bottom:5px;">📍 Sesi Penyimpanan Per-Lokasi</h3>
@@ -271,9 +279,7 @@
       <div id="locationsList"></div>
     </section>
 
-    <!-- ======================================================================
-         VIEW 4: DATA EXCEL, KAMUS BARCODE & EXPORT
-         ====================================================================== -->
+    <!-- VIEW 4: DATA EXCEL, KAMUS & EXPORT -->
     <section id="view-data" class="view-section">
       <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px;">
         <div class="glass-panel" style="padding:10px; text-align:center; margin-bottom:0;">
@@ -331,15 +337,13 @@
       </div>
     </section>
 
-    <!-- ======================================================================
-         VIEW 5: SYSTEM INFO
-         ====================================================================== -->
+    <!-- VIEW 5: SYSTEM INFO -->
     <section id="view-about" class="view-section">
       <div class="glass-panel">
         <h3 style="font-size:15px; color:var(--champagne); margin-bottom:8px;">Liamvscan — Retail PDT Terminal</h3>
         <p style="font-size:12.5px; color:var(--text-soft); line-height:1.6;">
           <strong>Project ID:</strong> com.xliamvr.scan<br/>
-          <strong>Versi:</strong> v2.0.0 Emerald Obsidian (Build 2026.11)<br/>
+          <strong>Versi:</strong> v2.1.0 Emerald Obsidian (Build 2026.11)<br/>
           <strong>Developer:</strong> Ilham Maulana Nur Al Rasyid<br/>
           <strong>Instagram:</strong> @xliamvr<br/>
           <strong>GitHub:</strong> github.com/xliamvr<br/>
@@ -353,9 +357,7 @@
 
   </div>
 
-  <!-- ========================================================================
-       MODAL 1: FORM LOKASI BARU (NOMOR LOKASI, PEMERIKSA, NO DOCUMENT, TANGGAL)
-       ======================================================================== -->
+  <!-- MODAL 1: FORM LOKASI BARU -->
   <div id="locationModal" class="modal-backdrop">
     <div class="modal-card">
       <h3 style="font-size:16px; color:var(--champagne); margin-bottom:4px;">📍 Mulai Sesi Lokasi Baru</h3>
@@ -386,9 +388,7 @@
     </div>
   </div>
 
-  <!-- ========================================================================
-       MODAL 2: SAMAKAN BARCODE
-       ======================================================================== -->
+  <!-- MODAL 2: SAMAKAN BARCODE -->
   <div id="pairModal" class="modal-backdrop">
     <div class="modal-card">
       <h3 style="font-size:15px; color:var(--champagne); margin-bottom:8px;">🔗 Samakan Barcode ke Artikel</h3>
@@ -409,9 +409,7 @@
     </div>
   </div>
 
-  <!-- ========================================================================
-       MODAL 3: DETAIL ARTIKEL, EDIT QTY & MATRIX SIZE
-       ======================================================================== -->
+  <!-- MODAL 3: DETAIL ARTIKEL -->
   <div id="detailModal" class="modal-backdrop">
     <div class="modal-card">
       <h3 id="detailCode" style="font-size:15px; color:var(--emerald-bright);">-</h3>
@@ -437,9 +435,7 @@
     </div>
   </div>
 
-  <!-- ========================================================================
-       GLOWING 5-TAB VECTOR BOTTOM NAVIGATION
-       ======================================================================== -->
+  <!-- BOTTOM NAVIGATION -->
   <nav class="bottom-nav">
     <button id="nav-scan" class="nav-btn active" onclick="LiamApp.switchView('scan', this)">
       <div class="nav-icon-wrap">
@@ -487,10 +483,15 @@
     </button>
   </nav>
 
-  <script src="./js/db.js"></script>
-  <script src="./js/excel.js"></script>
-  <script src="./js/scanner.js"></script>
-  <script src="./js/app.js"></script>
+  <script src="./js/db.js?v=21"></script>
+  <script src="./js/excel.js?v=21"></script>
+  <script src="./js/scanner.js?v=21"></script>
+  <script src="./js/app.js?v=21"></script>
+  <script>
+    if (typeof LiamDB === 'undefined') alert('File js/db.js belum lengkap atau belum di-commit!');
+    else if (typeof LiamExcel === 'undefined') alert('File js/excel.js belum lengkap atau belum di-commit!');
+    else if (typeof LiamScanner === 'undefined') alert('File js/scanner.js belum lengkap atau belum di-commit!');
+    else if (typeof LiamApp === 'undefined') alert('File js/app.js belum lengkap atau belum di-commit!');
+  </script>
 </body>
 </html>
- 
