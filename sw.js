@@ -1,4 +1,4 @@
-const CACHE_NAME = 'liamvscan-v1.0.0-2026.11';
+const CACHE_NAME = 'liamvscan-v1.1.0-2026.11';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
